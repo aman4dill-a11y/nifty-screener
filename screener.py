@@ -1,15 +1,14 @@
 import streamlit as st
 import asyncio
 import pandas as pd
-import pandas_ta as ta
 import yfinance as yf
 from telegram import Bot
 import urllib.request
 import threading
 import time
 
-TELEGRAM_TOKEN = 8623156036:AAH_6Bywtpp0KWz8yNDddE8YCe7Mkz0wFF8""
-TELEGRAM_CHAT_ID = "945488787"
+TELEGRAM_TOKEN = "PASTE_TOKEN_HERE"
+TELEGRAM_CHAT_ID = "PASTE_CHAT_ID_HERE"
 bot = Bot(token=TELEGRAM_TOKEN)
 
 def get_nifty_500():
@@ -27,16 +26,23 @@ async def send_alert(symbol, price, rsi):
     msg = f"🚨 BREAKOUT: {symbol.replace('.NS', '')}\nPrice: ₹{price:.2f}\nRSI: {rsi:.2f}\nQuality: Zero Debt/High ROCE"
     await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=msg)
 
+def compute_rsi(series, period=14):
+    delta = series.diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+    rs = gain / loss
+    return 100 - (100 / (1 + rs))
+
 def scan_markets():
     stocks = get_nifty_500()
     while True:
         for ticker in stocks:
             try:
                 data = yf.download(ticker, period="5d", interval="5m", progress=False)
-                if len(data) > 15:
-                    data['rsi'] = ta.rsi(data['Close'], length=14)
-                    latest = data['rsi'].iloc[-1]
-                    prev = data['rsi'].iloc[-2]
+                if len(data) > 20:
+                    data['rsi'] = compute_rsi(data['Close'], length=14)
+                    latest = float(data['rsi'].iloc[-1])
+                    prev = float(data['rsi'].iloc[-2])
                     price = float(data['Close'].iloc[-1])
                     if latest > 60 and prev <= 60:
                         asyncio.run(send_alert(ticker, price, latest))
