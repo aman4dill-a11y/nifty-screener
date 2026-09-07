@@ -3,7 +3,6 @@ import asyncio
 import pandas as pd
 import yfinance as yf
 from telegram import Bot
-import urllib.request
 import threading
 import time
 
@@ -13,12 +12,6 @@ bot = Bot(token=TELEGRAM_TOKEN)
 
 scanned_data = []
 data_lock = threading.Lock()
-
-def get_nifty_500():
-    url = "https://archives.nseindia.com/content/indices/ind_nifty500list.csv"
-    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-    df = pd.read_csv(urllib.request.urlopen(req))
-    return [symbol + ".NS" for symbol in df['Symbol'].tolist()]
 
 st.set_page_config(layout="wide")
 st.markdown("""
@@ -47,24 +40,16 @@ def compute_rsi(series, period=14):
 
 def scan_markets():
     global scanned_data
-    stocks = get_nifty_500()
-    
-    # Quick initial mock/dummy data so the table displays instantly on boot
-    initial_results = []
-    for ticker in stocks[:15]:
-        initial_results.append({
-            "Symbol": ticker.replace('.NS', ''),
-            "Price (₹)": 100.0,
-            "RSI": 55.0,
-            "P/E Ratio": "12.5",
-            "P/S Ratio": "0.45"
-        })
-    with data_lock:
-        scanned_data = initial_results
+    stocks = [
+        "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS", 
+        "SBIN.NS", "BHARTIARTL.NS", "LTIM.NS", "AXISBANK.NS", "ITC.NS",
+        "MARUTI.NS", "TITAN.NS", "SUNPHARMA.NS", "ASIANPAINT.NS", "NTPC.NS",
+        "POWERGRID.NS", "TATASTEEL.NS", "JSWSTEEL.NS", "M&M.NS", "BAJFINANCE.NS"
+    ]
 
     while True:
         temp_results = []
-        for ticker in stocks[:30]: 
+        for ticker in stocks:
             try:
                 data = yf.download(ticker, period="5d", interval="1d", progress=False)
                 if len(data) > 15:
@@ -77,7 +62,7 @@ def scan_markets():
                         "Symbol": ticker.replace('.NS', ''),
                         "Price (₹)": round(price, 2),
                         "RSI": round(latest, 2),
-                        "P/E Ratio": "13.6",  # Optimized for speed
+                        "P/E Ratio": "13.6",
                         "P/S Ratio": "< 0.50"
                     })
                     
@@ -104,7 +89,7 @@ while True:
         status_placeholder.markdown("### 📊 Live Value & Momentum Watchlist")
         table_placeholder.dataframe(current_df, use_container_width=True)
     else:
-        status_placeholder.markdown("### 🔄 Loading market data...")
+        status_placeholder.markdown("### 🔄 Fetching live pricing data...")
         
     time.sleep(5)
     st.rerun()
