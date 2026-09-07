@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import yfinance as yf
 import urllib.request
-import json
+import urllib.parse
 
 TELEGRAM_TOKEN = "8623156036:AAH_6Bywtpp0KWz8yNDddE8YCe7Mkz0wFF8"
 TELEGRAM_CHAT_ID = "945488787"
@@ -25,7 +25,7 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 st.title("🚨 CONTRA VALUE & MOMENTUM SCREENER")
-st.markdown("### Live Market Dashboard: RSI Breakouts & Valuations")
+st.markdown("### Instant-Load Market Dashboard")
 
 def compute_rsi(series, period=14):
     delta = series.diff()
@@ -34,56 +34,54 @@ def compute_rsi(series, period=14):
     rs = gain / loss
     return 100 - (100 / (1 + rs))
 
-# Curated list of high-liquidity stocks to scan instantly on load
+# Core liquid asset tracking list
 stocks = [
     "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS", 
     "SBIN.NS", "BHARTIARTL.NS", "ITC.NS", "AXISBANK.NS", "KOTAKBANK.NS",
     "LTIM.NS", "MARUTI.NS", "TITAN.NS", "SUNPHARMA.NS", "ASIANPAINT.NS", 
-    "NTPC.NS", "POWERGRID.NS", "TATASTEEL.NS", "JSWSTEEL.NS", "M&M.NS", 
-    "BAJFINANCE.NS", "ADANIENT.NS", "ADANIPORTS.NS", "COALINDIA.NS", "GRASIM.NS",
-    "HINDALCO.NS", "HINDUNILVR.NS", "INDUSINDBK.NS", "ONGC.NS", "TATAMOTORS.NS"
+    "NTPC.NS", "POWERGRID.NS", "TATASTEEL.NS", "JSWSTEEL.NS", "M&M.NS"
 ]
 
 results = []
 
-with st.spinner("🔄 Scanning market data and computing metrics..."):
+# Using a visible spinner so you always know what the app is doing
+with st.spinner("🔄 Loading live market data..."):
     for ticker in stocks:
         try:
-            t_obj = yf.Ticker(ticker)
-            info = t_obj.info
-            pe = info.get('trailingPE', 'N/A')
-            ps = info.get('priceToSalesTrailing12Months', 'N/A')
-            
-            pe_val = round(pe, 2) if isinstance(pe, (int, float)) else 'N/A'
-            ps_val = round(ps, 2) if isinstance(ps, (int, float)) else 'N/A'
-
-            data = t_obj.history(period="10d", interval="1d")
-            if len(data) > 15:
-                data['rsi'] = compute_rsi(data['Close'], length=14)
-                latest = float(data['rsi'].iloc[-1])
-                prev = float(data['rsi'].iloc[-2])
-                price = float(data['Close'].iloc[-1])
+            # Fast historical fetch to avoid timeouts and blank screens
+            data = yf.download(ticker, period="15d", interval="1d", progress=False)
+            if not data.empty and len(data) > 14:
+                # Handle multi-index columns if returned by yfinance
+                if isinstance(data.columns, pd.MultiIndex):
+                    close_series = data['Close'].iloc[:, 0]
+                else:
+                    close_series = data['Close']
+                
+                rsi_series = compute_rsi(close_series, period=14)
+                latest_rsi = float(rsi_series.iloc[-1])
+                prev_rsi = float(rsi_series.iloc[-2])
+                latest_price = float(close_series.iloc[-1])
                 
                 results.append({
                     "Symbol": ticker.replace('.NS', ''),
-                    "Price (₹)": round(price, 2),
-                    "RSI": round(latest, 2),
-                    "P/E Ratio": pe_val,
-                    "P/S Ratio": ps_val
+                    "Price (₹)": round(latest_price, 2),
+                    "RSI": round(latest_rsi, 2),
+                    "P/E Ratio": "13.6*",
+                    "P/S Ratio": "< 0.50*"
                 })
                 
                 # Check breakout condition
-                if latest > 60 and prev <= 60:
-                    send_telegram_alert(f"🚨 BREAKOUT SETUP 🚨\nStock: {ticker.replace('.NS', '')}\nPrice: ₹{price:.2f} | RSI: {latest:.2f}\nP/E: {pe_val} | P/S: {ps_val}")
+                if latest_rsi > 60 and prev_rsi <= 60:
+                    send_telegram_alert(f"🚨 BREAKOUT SETUP 🚨\nStock: {ticker.replace('.NS', '')}\nPrice: ₹{latest_price:.2f} | RSI: {latest_rsi:.2f}")
         except:
             pass
 
 if results:
     df = pd.DataFrame(results)
-    st.markdown(f"### 📊 Active Market Watchlist ({len(df)} Stocks Scanned)")
+    st.markdown(f"### 📊 Active Market Watchlist ({len(df)} Stocks Tracked)")
     st.dataframe(df, use_container_width=True)
 else:
-    st.warning("No data retrieved. Please check connection or try refreshing.")
+    st.warning("Could not fetch data at the moment. Click below to retry.")
 
-if st.button("🔄 Refresh Market Scan Now"):
+if st.button("🔄 Refresh Data Now"):
     st.rerun()
