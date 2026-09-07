@@ -22,13 +22,19 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 st.title("🚨 CONTRA VALUE & MOMENTUM SCREENER")
-st.markdown("### Tracking RSI Breakouts & Multiples")
+st.markdown("### Pro Live Universe Scanner: RSI Breakouts & Valuation Filters")
 
 table_placeholder = st.empty()
 status_placeholder = st.empty()
 
-async def send_alert(symbol, price, rsi):
-    msg = f"🚨 BREAKOUT SETUP 🚨\nStock: {symbol.replace('.NS', '')}\nPrice: ₹{price:.2f} | RSI: {rsi:.2f}"
+async def send_alert(symbol, price, rsi, pe, ps):
+    msg = (
+        f"🚨 PRO BREAKOUT ALERT 🚨\n"
+        f"Stock: {symbol.replace('.NS', '')}\n"
+        f"Price: ₹{price:.2f} | RSI: {rsi:.2f}\n"
+        f"P/E: {pe} | P/S: {ps}\n"
+        f"Strategy: Contra Value / Momentum Match"
+    )
     await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=msg)
 
 def compute_rsi(series, period=14):
@@ -40,18 +46,29 @@ def compute_rsi(series, period=14):
 
 def scan_markets():
     global scanned_data
+    # Comprehensive pro liquid Nifty universe list
     stocks = [
         "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS", 
-        "SBIN.NS", "BHARTIARTL.NS", "LTIM.NS", "AXISBANK.NS", "ITC.NS",
-        "MARUTI.NS", "TITAN.NS", "SUNPHARMA.NS", "ASIANPAINT.NS", "NTPC.NS",
-        "POWERGRID.NS", "TATASTEEL.NS", "JSWSTEEL.NS", "M&M.NS", "BAJFINANCE.NS"
+        "SBIN.NS", "BHARTIARTL.NS", "ITC.NS", "AXISBANK.NS", "KOTAKBANK.NS",
+        "LTIM.NS", "MARUTI.NS", "TITAN.NS", "SUNPHARMA.NS", "ASIANPAINT.NS", 
+        "NTPC.NS", "POWERGRID.NS", "TATASTEEL.NS", "JSWSTEEL.NS", "M&M.NS", 
+        "BAJFINANCE.NS", "ADANIENT.NS", "ADANIPORTS.NS", "COALINDIA.NS", "GRASIM.NS",
+        "HINDALCO.NS", "HINDUNILVR.NS", "INDUSINDBK.NS", "ONGC.NS", "TATAMOTORS.NS"
     ]
 
     while True:
         temp_results = []
         for ticker in stocks:
             try:
-                data = yf.download(ticker, period="5d", interval="1d", progress=False)
+                t_obj = yf.Ticker(ticker)
+                info = t_obj.info
+                pe = info.get('trailingPE', 'N/A')
+                ps = info.get('priceToSalesTrailing12Months', 'N/A')
+                
+                pe_val = round(pe, 2) if isinstance(pe, (int, float)) else 'N/A'
+                ps_val = round(ps, 2) if isinstance(ps, (int, float)) else 'N/A'
+
+                data = t_obj.history(period="5d", interval="1d")
                 if len(data) > 15:
                     data['rsi'] = compute_rsi(data['Close'], length=14)
                     latest = float(data['rsi'].iloc[-1])
@@ -62,14 +79,16 @@ def scan_markets():
                         "Symbol": ticker.replace('.NS', ''),
                         "Price (₹)": round(price, 2),
                         "RSI": round(latest, 2),
-                        "P/E Ratio": "13.6",
-                        "P/S Ratio": "< 0.50"
+                        "P/E Ratio": pe_val,
+                        "P/S Ratio": ps_val
                     })
                     
+                    # Trigger alert if RSI crosses above 60
                     if latest > 60 and prev <= 60:
-                        asyncio.run(send_alert(ticker, price, latest))
+                        asyncio.run(send_alert(ticker, price, latest, pe_val, ps_val))
             except:
                 pass
+            time.sleep(0.2)
         
         if temp_results:
             with data_lock:
@@ -86,10 +105,10 @@ while True:
         current_df = pd.DataFrame(scanned_data)
     
     if not current_df.empty:
-        status_placeholder.markdown("### 📊 Live Value & Momentum Watchlist")
+        status_placeholder.markdown(f"### 📊 Pro Live Watchlist ({len(current_df)} Tracked)")
         table_placeholder.dataframe(current_df, use_container_width=True)
     else:
-        status_placeholder.markdown("### 🔄 Fetching live pricing data...")
+        status_placeholder.markdown("### 🔄 Fetching live pricing and valuation feeds...")
         
     time.sleep(5)
     st.rerun()
